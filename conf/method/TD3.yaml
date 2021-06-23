@@ -1,0 +1,14 @@
+# @package _group_
+
+name: 'TD3'
+activation: lrelu
+critic_lr: 0.0005
+actor_lr: 0.0005
+critic_weight_decay: 0.000001
+actor_weight_decay: 0.000001
+tau: 0.0005
+critic_grad_clip: 0.1
+actor_grad_clip: 0.1
+
+demo_augmentation: True
+demo_augmentation_every_n: 10

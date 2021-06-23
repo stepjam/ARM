@@ -1,0 +1,26 @@
+# @package _group_
+
+name: 'C2FARM'
+
+lr: 0.0005
+tau: 0.0025
+
+activation: lrelu
+norm: None
+
+lambda_weight_l2: 0.000001
+lambda_trans_qreg: 1.0
+lambda_rot_qreg: 1.0
+
+rotation_resolution: 5
+
+# Voxel
+image_crop_size: 64
+bounds_offset: [0.15]
+voxel_sizes: [16, 16]
+
+crop_augmentation: True
+
+demo_augmentation: True
+demo_augmentation_every_n: 10
+exploration_strategy: gaussian

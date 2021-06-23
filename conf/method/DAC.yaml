@@ -1,0 +1,29 @@
+# @package _group_
+
+name: 'DAC'
+activation: lrelu
+critic_lr: 0.001
+actor_lr:  0.001
+critic_weight_decay: 0.000001
+actor_weight_decay: 0.000001
+tau: 0.01
+critic_grad_clip: 5
+actor_grad_clip: 5
+
+decoder_weight_decay: 0.000001
+decoder_grad_clip: 5
+decoder_lr: 0.001
+decoder_latent_lambda: 0.000001
+encoder_tau: 0.05
+
+alpha: 1.0
+alpha_auto_tune: True
+alpha_lr: 0.0005
+
+lambda_gp: 10.0
+discriminator_lr: 0.00005
+discriminator_grad_clip: 10.0
+discriminator_weight_decay: 0.000001
+
+demo_augmentation: True
+demo_augmentation_every_n: 10
