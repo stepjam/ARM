@@ -2,8 +2,8 @@
 
 Codebase of Q-attention (within the ARM system) and coarse-to-fine Q-attention (within C2F-ARM system) from the following papers:
 
-- Q-attention: Enabling Efficient Learning for Vision-based Robotic Manipulation (ARM system)
-- Coarse-to-Fine Q-attention: Efficient Learning for Visual Robotic Manipulation via Discretisation (C2F-ARM system)
+- [Q-attention: Enabling Efficient Learning for Vision-based Robotic Manipulation](https://arxiv.org/abs/2105.14829) (ARM system)
+- [Coarse-to-Fine Q-attention: Efficient Learning for Visual Robotic Manipulation via Discretisation](https://arxiv.org/abs/2106.12534) (C2F-ARM system)
 
 ![task grid image missing](readme_files/arm_c2farm.png)
 
