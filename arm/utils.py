@@ -1,6 +1,8 @@
 import numpy as np
 import pyrender
 import torch
+import trimesh
+from pyrender.trackball import Trackball
 from rlbench.backend.const import DEPTH_SCALE
 from scipy.spatial.transform import Rotation
 
@@ -102,3 +104,94 @@ def _from_trimesh_scene(
         pose, geom_name = trimesh_scene.graph[node]
         scene_pr.add(geometries[geom_name], pose=pose)
     return scene_pr
+
+
+def _create_bounding_box(scene, voxel_size, res):
+    l = voxel_size * res
+    T = np.eye(4)
+    w = 0.01
+    for trans in [[0, 0, l / 2], [0, l, l / 2], [l, l, l / 2], [l, 0, l / 2]]:
+        T[:3, 3] = np.array(trans) - voxel_size / 2
+        scene.add_geometry(trimesh.creation.box(
+            [w, w, l], T, face_colors=[0, 0, 0, 255]))
+    for trans in [[l / 2, 0, 0], [l / 2, 0, l], [l / 2, l, 0], [l / 2, l, l]]:
+        T[:3, 3] = np.array(trans) - voxel_size / 2
+        scene.add_geometry(trimesh.creation.box(
+            [l, w, w], T, face_colors=[0, 0, 0, 255]))
+    for trans in [[0, l / 2, 0], [0, l / 2, l], [l, l / 2, 0], [l, l / 2, l]]:
+        T[:3, 3] = np.array(trans) - voxel_size / 2
+        scene.add_geometry(trimesh.creation.box(
+            [w, l, w], T, face_colors=[0, 0, 0, 255]))
+
+
+def create_voxel_scene(
+        voxel_grid: np.ndarray,
+        q_attention: np.ndarray = None,
+        highlight_coordinate: np.ndarray = None,
+        highlight_alpha: float = 1.0,
+        voxel_size: float = 0.1,
+        show_bb: bool = False,
+        alpha: float = 0.5):
+    _, d, h, w = voxel_grid.shape
+    v = voxel_grid.transpose((1, 2, 3, 0))
+    occupancy = v[:, :, :, -1] != 0
+    alpha = np.expand_dims(np.full_like(occupancy, alpha, dtype=np.float32), -1)
+    rgb = np.concatenate([(v[:, :, :, 3:6] + 1)/ 2.0, alpha], axis=-1)
+
+    if q_attention is not None:
+        q = np.max(q_attention, 0)
+        q = q / np.max(q)
+        show_q = (q > 0.75)
+        occupancy = (show_q + occupancy).astype(bool)
+        q = np.expand_dims(q - 0.5, -1)  # Max q can be is 0.9
+        q_rgb = np.concatenate([
+            q, np.zeros_like(q), np.zeros_like(q),
+            np.clip(q, 0, 1)], axis=-1)
+        rgb = np.where(np.expand_dims(show_q, -1), q_rgb, rgb)
+
+    if highlight_coordinate is not None:
+        x, y, z = highlight_coordinate
+        occupancy[x, y, z] = True
+        rgb[x, y, z] = [1.0, 0.0, 0.0, highlight_alpha]
+
+    transform = trimesh.transformations.scale_and_translate(
+        scale=voxel_size, translate=(0.0, 0.0, 0.0))
+    trimesh_voxel_grid = trimesh.voxel.VoxelGrid(
+        encoding=occupancy, transform=transform)
+    geometry = trimesh_voxel_grid.as_boxes(colors=rgb)
+    scene = trimesh.Scene()
+    scene.add_geometry(geometry)
+    if show_bb:
+        assert d == h == w
+        _create_bounding_box(scene, voxel_size, d)
+    return scene
+
+
+def visualise_voxel(voxel_grid: np.ndarray,
+                    q_attention: np.ndarray = None,
+                    highlight_coordinate: np.ndarray = None,
+                    highlight_alpha: float = 1.0,
+                    rotation_amount: float = 0.0,
+                    show: bool = False,
+                    voxel_size: float = 0.1,
+                    offscreen_renderer: pyrender.OffscreenRenderer = None,
+                    show_bb: bool = False):
+    scene = create_voxel_scene(
+        voxel_grid, q_attention, highlight_coordinate,
+        highlight_alpha, voxel_size, show_bb)
+    if show:
+        scene.show()
+    else:
+        r = offscreen_renderer or pyrender.OffscreenRenderer(
+            viewport_width=640, viewport_height=480, point_size=1.0)
+        s = _from_trimesh_scene(
+            scene, ambient_light=[0.8, 0.8, 0.8],
+            bg_color=[1.0, 1.0, 1.0])
+        cam = pyrender.PerspectiveCamera(
+            yfov=np.pi / 4.0, aspectRatio=r.viewport_width/r.viewport_height)
+        p = _compute_initial_camera_pose(s)
+        t = Trackball(p, (r.viewport_width, r.viewport_height), s.scale, s.centroid)
+        t.rotate(rotation_amount, np.array([0.0, 0.0, 1.0]))
+        s.add(cam, pose=t.pose)
+        color, depth = r.render(s)
+        return color.copy()

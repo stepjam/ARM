@@ -1,5 +1,5 @@
 import copy
-from typing import List
+from typing import List, Union
 
 import torch
 import torch.nn as nn
@@ -84,6 +84,50 @@ class Conv2DBlock(nn.Module):
 
     def forward(self, x):
         x = self.conv2d(x)
+        x = self.norm(x) if self.norm is not None else x
+        x = self.activation(x) if self.activation is not None else x
+        return x
+
+
+class Conv3DBlock(nn.Module):
+
+    def __init__(self, in_channels, out_channels,
+                 kernel_sizes: Union[int, list], strides,
+                 norm=None, activation=None, padding_mode='replicate',
+                 padding=None):
+        super(Conv3DBlock, self).__init__()
+        padding = kernel_sizes // 2 if padding is None else padding
+        self.conv3d = nn.Conv3d(
+            in_channels, out_channels, kernel_sizes, strides, padding=padding,
+            padding_mode=padding_mode)
+
+        if activation is None:
+            nn.init.xavier_uniform_(self.conv3d.weight,
+                                    gain=nn.init.calculate_gain('linear'))
+            nn.init.zeros_(self.conv3d.bias)
+        elif activation == 'tanh':
+            nn.init.xavier_uniform_(self.conv3d.weight,
+                                    gain=nn.init.calculate_gain('tanh'))
+            nn.init.zeros_(self.conv3d.bias)
+        elif activation == 'lrelu':
+            nn.init.kaiming_uniform_(self.conv3d.weight, a=LRELU_SLOPE,
+                                     nonlinearity='leaky_relu')
+            nn.init.zeros_(self.conv3d.bias)
+        elif activation == 'relu':
+            nn.init.kaiming_uniform_(self.conv3d.weight, nonlinearity='relu')
+            nn.init.zeros_(self.conv3d.bias)
+        else:
+            raise ValueError()
+
+        self.activation = None
+        self.norm = None
+        if norm is not None:
+            self.norm = norm_layer3d(norm, out_channels)
+        if activation is not None:
+            self.activation = act_layer(activation)
+
+    def forward(self, x):
+        x = self.conv3d(x)
         x = self.norm(x) if self.norm is not None else x
         x = self.activation(x) if self.activation is not None else x
         return x
@@ -243,3 +287,109 @@ class CNNAndFcsNet(nn.Module):
         x = self._cnn(combined)
         x = self._maxp(x).squeeze(-1).squeeze(-1)
         return self._fcs(x)
+
+
+class Conv3DInceptionBlockUpsampleBlock(nn.Module):
+
+    def __init__(self, in_channels, out_channels, scale_factor,
+                 norm=None, activation=None, residual=False):
+        super(Conv3DInceptionBlockUpsampleBlock, self).__init__()
+        layer = []
+
+        convt_block = Conv3DInceptionBlock(
+            in_channels, out_channels, norm, activation)
+        layer.append(convt_block)
+
+        if scale_factor > 1:
+            layer.append(nn.Upsample(
+                scale_factor=scale_factor, mode='trilinear',
+                align_corners=False))
+
+        convt_block = Conv3DInceptionBlock(
+            out_channels, out_channels, norm, activation)
+        layer.append(convt_block)
+
+        self.conv_up = nn.Sequential(*layer)
+
+    def forward(self, x):
+        return self.conv_up(x)
+
+
+class Conv3DInceptionBlock(nn.Module):
+
+    def __init__(self, in_channels, out_channels, norm=None, activation=None,
+                 residual=False):
+        super(Conv3DInceptionBlock, self).__init__()
+        self._residual = residual
+        cs = out_channels // 4
+        assert out_channels % 4 == 0
+        latent = 32
+        self._1x1conv = Conv3DBlock(
+            in_channels, cs * 2, kernel_sizes=1, strides=1, norm=norm,
+            activation=activation)
+
+        self._1x1conv_a = Conv3DBlock(
+            in_channels, latent, kernel_sizes=1, strides=1, norm=norm,
+            activation=activation)
+        self._3x3conv = Conv3DBlock(
+            latent, cs, kernel_sizes=3, strides=1,
+            norm=norm, activation=activation)
+
+        self._1x1conv_b = Conv3DBlock(
+            in_channels, latent, kernel_sizes=1, strides=1, norm=norm,
+            activation=activation)
+        self._5x5_via_3x3conv_a = Conv3DBlock(
+            latent, latent, kernel_sizes=3, strides=1, norm=norm,
+            activation=activation)
+        self._5x5_via_3x3conv_b = Conv3DBlock(
+            latent, cs, kernel_sizes=3, strides=1, norm=norm,
+            activation=activation)
+        self.out_channels = out_channels + (in_channels if residual else 0)
+
+    def forward(self, x):
+        yy = []
+        if self._residual:
+            yy = [x]
+        return torch.cat(yy + [self._1x1conv(x),
+                               self._3x3conv(self._1x1conv_a(x)),
+                               self._5x5_via_3x3conv_b(self._5x5_via_3x3conv_a(
+                                   self._1x1conv_b(x)))], 1)
+
+
+class SpatialSoftmax3D(torch.nn.Module):
+
+    def __init__(self, depth, height, width, channel):
+        super(SpatialSoftmax3D, self).__init__()
+        self.depth = depth
+        self.height = height
+        self.width = width
+        self.channel = channel
+        self.temperature = 0.01
+        pos_x, pos_y, pos_z = np.meshgrid(
+            np.linspace(-1., 1., self.depth),
+            np.linspace(-1., 1., self.height),
+            np.linspace(-1., 1., self.width)
+        )
+        pos_x = torch.from_numpy(
+            pos_x.reshape(self.depth * self.height * self.width)).float()
+        pos_y = torch.from_numpy(
+            pos_y.reshape(self.depth * self.height * self.width)).float()
+        pos_z = torch.from_numpy(
+            pos_z.reshape(self.depth * self.height * self.width)).float()
+        self.register_buffer('pos_x', pos_x)
+        self.register_buffer('pos_y', pos_y)
+        self.register_buffer('pos_z', pos_z)
+
+    def forward(self, feature):
+        feature = feature.view(
+            -1, self.height * self.width * self.depth)  # (B, c*d*h*w)
+        softmax_attention = F.softmax(feature / self.temperature, dim=-1)
+        expected_x = torch.sum(self.pos_x * softmax_attention, dim=1,
+                               keepdim=True)
+        expected_y = torch.sum(self.pos_y * softmax_attention, dim=1,
+                               keepdim=True)
+        expected_z = torch.sum(self.pos_z * softmax_attention, dim=1,
+                               keepdim=True)
+        expected_xy = torch.cat([expected_x, expected_y, expected_z], 1)
+        feature_keypoints = expected_xy.view(-1, self.channel * 3)
+        return feature_keypoints
