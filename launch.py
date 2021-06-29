@@ -285,6 +285,7 @@ def main(cfg: DictConfig) -> None:
         torch.backends.cudnn.enabled = torch.backends.cudnn.benchmark = True
     else:
         device = torch.device("cpu")
+    logging.info('Using device %s.' % str(device))
 
     action_mode = ActionMode(
         ArmActionMode.ABS_EE_POSE_PLAN_WORLD_FRAME,

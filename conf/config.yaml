@@ -1,10 +1,11 @@
 rlbench:
     task: take_lid_off_saucepan
-    demos: 100
-    demo_path: /ptmp/rlbench_data
+    demos: 10
+    demo_path: /my/demo/path
     episode_length: 10
     cameras: [front]
     camera_resolution: [128, 128]
+    scene_bounds: [-0.3, -0.5, 0.6, 0.7, 0.5, 1.6]
 
 replay:
     batch_size: 128
@@ -16,7 +17,7 @@ replay:
 framework:
     log_freq: 100
     train_envs: 1
-    eval_envs: 0
+    eval_envs: 1
     replay_ratio: 128
     transitions_before_train: 200
     tensorboard_logging: True
@@ -27,7 +28,7 @@ framework:
     seeds: 1
 
 defaults:
-    - method: ARM
+    - method: C2FARM
 
 hydra:
     run:

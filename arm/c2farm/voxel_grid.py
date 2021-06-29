@@ -87,6 +87,38 @@ class VoxelGrid(nn.Module):
             arange.view(1, 1, w, 1).repeat([w, w, 1, 1])], dim=-1).unsqueeze(
             0).repeat([self._batch_size, 1, 1, 1, 1])
 
+    def _broadcast(self, src: torch.Tensor, other: torch.Tensor, dim: int):
+        if dim < 0:
+            dim = other.dim() + dim
+        if src.dim() == 1:
+            for _ in range(0, dim):
+                src = src.unsqueeze(0)
+        for _ in range(src.dim(), other.dim()):
+            src = src.unsqueeze(-1)
+        src = src.expand_as(other)
+        return src
+
+    def _scatter_mean(self, src: torch.Tensor, index: torch.Tensor, out: torch.Tensor,
+                      dim: int = -1):
+        out = out.scatter_add_(dim, index, src)
+
+        index_dim = dim
+        if index_dim < 0:
+            index_dim = index_dim + src.dim()
+        if index.dim() <= index_dim:
+            index_dim = index.dim() - 1
+
+        ones = torch.ones(index.size(), dtype=src.dtype, device=src.device)
+        out_count = torch.zeros(out.size(), dtype=out.dtype, device=out.device)
+        out_count = out_count.scatter_add_(index_dim, index, ones)
+        out_count.clamp_(1)
+        count = self._broadcast(out_count, out, dim)
+        if torch.is_floating_point(out):
+            out.true_divide_(count)
+        else:
+            out.floor_divide_(count)
+        return out
+
     def _scatter_nd(self, indices, updates):
         indices_shape = indices.shape
         num_index_dims = indices_shape[-1]
@@ -103,9 +135,9 @@ class VoxelGrid(nn.Module):
         indices_for_flat = indices_for_flat_tiled + implicit_indices
         flat_indices_for_flat = indices_for_flat.view((-1,)).long()
 
-        flat_scatter = _torch_scatter.scatter(
+        flat_scatter = self._scatter_mean(
             flat_updates, flat_indices_for_flat,
-            out=torch.zeros_like(self._flat_output), reduce='mean')
+            out=torch.zeros_like(self._flat_output))
         return flat_scatter.view(self._total_dims_list)
 
     def coords_to_bounding_voxel_grid(self, coords, coord_features=None,
