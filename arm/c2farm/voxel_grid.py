@@ -4,11 +4,6 @@ from operator import mul
 import torch
 from torch import nn
 
-try:
-    import torch_scatter as _torch_scatter
-except ImportError:
-    _torch_scatter = None
-
 MIN_DENOMINATOR = 1e-12
 INCLUDE_PER_VOXEL_COORD = False
 
