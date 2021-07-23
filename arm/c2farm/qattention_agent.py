@@ -197,7 +197,7 @@ class QAttentionAgent(Agent):
         top_left_corner = torch.clamp(
             pixel_action - self._image_crop_size // 2, 0,
             h - self._image_crop_size)
-        grid = self._grid_for_crop + top_left_corner.unsqueeze(1)
+        grid = self._grid_for_crop + top_left_corner.unsqueeze(1).to(self._device)
         grid = ((grid / float(h)) * 2.0) - 1.0  # between -1 and 1
         # Used for cropping the images across a batch
         # swap fro y x, to x, y
@@ -386,7 +386,7 @@ class QAttentionAgent(Agent):
         if self._layer > 0:
             cp = observation['attention_coordinate']
             bounds = torch.cat(
-                [cp - self._bounds_offset, cp + self._bounds_offset], dim=1)
+                [cp - self._bounds_offset, cp + self._bounds_offset], dim=1).to(self._device)
         res = (bounds[:, 3:] - bounds[:, :3]) / self._voxel_size
 
         max_rot_index = int(360 // self._rotation_resolution)
@@ -474,9 +474,9 @@ class QAttentionAgent(Agent):
         return [
             ImageSummary('%s/act_Qattention' % self._name,
                          transforms.ToTensor()(visualise_voxel(
-                             self._act_voxel_grid.numpy(),
-                             self._act_qvalues.numpy(),
-                             self._act_max_coordinate.numpy())))]
+                             self._act_voxel_grid.cpu().numpy(),
+                             self._act_qvalues.cpu().numpy(),
+                             self._act_max_coordinate.cpu().numpy())))]
 
     def load_weights(self, savedir: str):
         self._q.load_state_dict(

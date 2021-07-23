@@ -49,9 +49,12 @@ class QAttentionStackAgent(Agent):
         observation_elements = {}
         translation_results, rot_grip_results = [], []
         infos = {}
+        for k, v in observation.items():
+            if isinstance(v, torch.Tensor):
+                observation[k].to(self._qattention_agents[0]._device)
         for depth, qagent in enumerate(self._qattention_agents):
             act_results = qagent.act(step, observation, deterministic)
-            attention_coordinate = act_results.observation_elements['attention_coordinate']
+            attention_coordinate = act_results.observation_elements['attention_coordinate'].cpu()
             observation_elements['attention_coordinate_layer_%d' % depth] = attention_coordinate[0].numpy()
 
             translation_idxs, rot_grip_idxs = act_results.action
@@ -66,19 +69,19 @@ class QAttentionStackAgent(Agent):
             for n in self._camera_names:
                 px, py = utils.point_to_pixel_index(
                     attention_coordinate[0].numpy(),
-                    observation['%s_camera_extrinsics' % n][0, 0].numpy(),
-                    observation['%s_camera_intrinsics' % n][0, 0].numpy())
+                    observation['%s_camera_extrinsics' % n][0, 0].cpu().numpy(),
+                    observation['%s_camera_intrinsics' % n][0, 0].cpu().numpy())
                 pc_t = torch.tensor([[[py, px]]], dtype=torch.float32)
                 observation['%s_pixel_coord' % n] = pc_t
                 observation_elements['%s_pixel_coord' % n] = [py, px]
 
             infos.update(act_results.info)
 
-        rgai = torch.cat(rot_grip_results, 1)[0].numpy()
+        rgai = torch.cat(rot_grip_results, 1)[0].cpu().numpy()
         observation_elements['trans_action_indicies'] = torch.cat(translation_results, 1)[0].numpy()
         observation_elements['rot_grip_action_indicies'] = rgai
         continuous_action = np.concatenate([
-            act_results.observation_elements['attention_coordinate'].numpy()[0],
+            attention_coordinate.numpy()[0],
             utils.discrete_euler_to_quaternion(rgai[-4:-1], self._rotation_resolution),
             rgai[-1:]])
         return ActResult(
