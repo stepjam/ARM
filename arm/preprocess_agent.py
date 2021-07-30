@@ -19,7 +19,8 @@ class PreprocessAgent(Agent):
         return (x.float() / 255.0) * 2.0 - 1.0
 
     def update(self, step: int, replay_sample: dict) -> dict:
-        replay_sample = {k: v for k, v in replay_sample.items()}
+        # Samples are (B, N, ...) where N is number of buffers/tasks. This is a single task setup, so 0 index.
+        replay_sample = {k: v[:, 0] for k, v in replay_sample.items()}
         for k, v in replay_sample.items():
             if 'rgb' in k:
                 replay_sample[k] = self._norm_rgb_(v)

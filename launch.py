@@ -251,9 +251,9 @@ def run_seed(cfg: DictConfig, env, cams, device, seed) -> None:
             pickle.dump(action_min_max, f)
 
     env_runner = EnvRunner(
-        env=env, agent=agent, replay_buffer=explore_replay,
-        train_envs=train_envs,
-        eval_envs=cfg.framework.eval_envs,
+        train_env=env, agent=agent, train_replay_buffer=explore_replay,
+        num_train_envs=train_envs,
+        num_eval_envs=cfg.framework.eval_envs,
         episodes=99999,
         episode_length=cfg.rlbench.episode_length,
         stat_accumulator=stat_accum,
@@ -305,8 +305,7 @@ def main(cfg: DictConfig) -> None:
     env = CustomRLBenchEnv(
         task_class=task_class, observation_config=obs_config,
         action_mode=action_mode, dataset_root=cfg.rlbench.demo_path,
-        episode_length=cfg.rlbench.episode_length, headless=True,
-        state_includes_remaining_time=False)
+        episode_length=cfg.rlbench.episode_length, headless=True)
 
     cwd = os.getcwd()
     logging.info('CWD:' + os.getcwd())
