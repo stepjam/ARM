@@ -37,12 +37,8 @@ class QFunction(nn.Module):
 
     def _argmax_3d(self, tensor_orig):
         b, c, d, h, w = tensor_orig.shape  # c will be one
-        tensor = tensor_orig.max(1, keepdim=True)[0]
-        max_val_hw, argmax_hw = tensor.view(b, d, -1).max(2)
-        d_ = max_val_hw.argmax(1)
-        m = argmax_hw.gather(1, d_.unsqueeze(-1).repeat(1, d))[:, 0].unsqueeze(
-            -1)
-        indices = torch.cat((d_.unsqueeze(-1), (m // h) % w, m % w), dim=1)
+        idxs = tensor_orig.view(b, c, -1).argmax(-1)
+        indices = torch.cat([((idxs // h) // d), (idxs // h) % w, idxs % w], 1)
         return indices
 
     def choose_highest_action(self, q_trans, q_rot_grip):
