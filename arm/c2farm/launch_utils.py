@@ -207,30 +207,19 @@ def create_agent(cfg: DictConfig, env, depth_0bounds=None, cam_resolution=None):
     num_rotation_classes = int(360. // cfg.method.rotation_resolution)
     qattention_agents = []
     for depth, vox_size in enumerate(cfg.method.voxel_sizes):
-        if depth == 0:
-            unet3d = Qattention3DNet(
-                in_channels=VOXEL_FEATS + 3 + 1 + 3,
-                out_channels=1,
-                voxel_size=vox_size,
-                out_dense=0,
-                kernels=LATENT_SIZE,
-                norm=None if 'None' in cfg.method.norm else cfg.method.norm,
-                dense_feats=128,
-                activation=cfg.method.activation,
-                low_dim_size=env.low_dim_state_len)
-        else:
-            last = depth == len(cfg.method.voxel_sizes) - 1
-            unet3d = Qattention3DNet(
-                in_channels=VOXEL_FEATS + 3 + 1 + 3,
-                out_channels=2,
-                voxel_size=vox_size,
-                out_dense=(num_rotation_classes * 3) if last else 0,
-                kernels=LATENT_SIZE,
-                dense_feats=128,
-                norm=None if 'None' in cfg.method.norm else cfg.method.norm,
-                activation=cfg.method.activation,
-                low_dim_size=env.low_dim_state_len,
-                include_prev_layer=include_prev_layer)
+        last = depth == len(cfg.method.voxel_sizes) - 1
+        unet3d = Qattention3DNet(
+            in_channels=VOXEL_FEATS + 3 + 1 + 3,
+            out_channels=1,
+            voxel_size=vox_size,
+            out_dense=((num_rotation_classes * 3) + 2) if last else 0,
+            kernels=LATENT_SIZE,
+            norm=None if 'None' in cfg.method.norm else cfg.method.norm,
+            dense_feats=128,
+            activation=cfg.method.activation,
+            low_dim_size=env.low_dim_state_len,
+            include_prev_layer=include_prev_layer and depth > 0)
+
 
         qattention_agent = QAttentionAgent(
             layer=depth,

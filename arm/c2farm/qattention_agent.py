@@ -50,17 +50,14 @@ class QFunction(nn.Module):
         rot_and_grip_indicies = None
         if q_rot_grip is not None:
             q_rot = torch.stack(torch.split(
-                # q_rot_grip[:, :-2],
-                q_rot_grip[:, :],
+                q_rot_grip[:, :-2],
                 int(360 // self._rotation_resolution),
                 dim=1), dim=1)
-            b, c, d, h, w = q_trans.shape  # c will be one
-            grasp_indicies = q_trans.view(b, c, -1).max(-1)[0].argmax(1, keepdim=True)
             rot_and_grip_indicies = torch.cat(
                 [q_rot[:, 0:1].argmax(-1),
                  q_rot[:, 1:2].argmax(-1),
                  q_rot[:, 2:3].argmax(-1),
-                 grasp_indicies], -1)
+                 q_rot_grip[:, -2:].argmax(-1, keepdim=True)], -1)
         return coords, rot_and_grip_indicies
 
     def forward(self, x, proprio, pcd,
@@ -319,7 +316,7 @@ class QAttentionAgent(Agent):
 
             q_tp1_at_voxel_idx = self._get_value_from_voxel_index(q_tp1_targ, coords_tp1)
             if with_rot_and_grip:
-                target_q_tp1_rot_grip = self._get_value_from_rot_and_grip(torch.cat([q_rot_grip_tp1_targ, q_tp1_at_voxel_idx], 1), rot_and_grip_indicies_tp1)  # (B, 4)
+                target_q_tp1_rot_grip = self._get_value_from_rot_and_grip(q_rot_grip_tp1_targ, rot_and_grip_indicies_tp1)  # (B, 4)
                 q_tp1_at_voxel_idx = target_q_tp1_rot_grip.mean(1, keepdim=True)
 
             q_target = (reward.unsqueeze(1) + (self._gamma ** self._nstep) * (1 - terminal.unsqueeze(1)) * q_tp1_at_voxel_idx).detach()
@@ -328,12 +325,11 @@ class QAttentionAgent(Agent):
         qreg_loss = F.l1_loss(q, torch.zeros_like(q), reduction='none')
         qreg_loss = qreg_loss.mean(-1).mean(-1).mean(-1).mean(-1) * self._lambda_trans_qreg
         chosen_trans_q1 = self._get_value_from_voxel_index(q, action_trans)
+        q_delta = F.smooth_l1_loss(chosen_trans_q1[:, :1], q_target, reduction='none')
         if with_rot_and_grip:
-            target_q_rot_grip = self._get_value_from_rot_and_grip(torch.cat([q_rot_grip, chosen_trans_q1], 1), action_rot_grip)  # (B, 4)
-            q_delta = F.smooth_l1_loss(target_q_rot_grip, q_target.repeat((1, 4)), reduction='none')
+            target_q_rot_grip = self._get_value_from_rot_and_grip(q_rot_grip, action_rot_grip)  # (B, 4)
+            q_delta = torch.cat([F.smooth_l1_loss(target_q_rot_grip, q_target.repeat((1, 4)), reduction='none'), q_delta], -1)
             qreg_loss += F.l1_loss(q_rot_grip, torch.zeros_like(q_rot_grip), reduction='none').mean(1) * self._lambda_trans_qreg
-        else:
-            q_delta = F.smooth_l1_loss(chosen_trans_q1[:, :1], q_target, reduction='none')
 
         loss_weights = utils.loss_weights(replay_sample, REPLAY_BETA)
         combined_delta = q_delta.mean(1)
@@ -355,8 +351,9 @@ class QAttentionAgent(Agent):
             self._summaries.update({
                 'q/mean_q_rotation': q_rot_grip.mean(),
                 'q/max_q_rotation': target_q_rot_grip[:, :3].mean(),
-                'losses/bellman_rotation': q_delta[:, :3].mean(),
-                'losses/bellman_qattention': q_delta[:, -1:].mean(),
+                'losses/bellman_rotation': q_delta[:, 3].mean(),
+                'losses/bellman_gripper': q_delta[:, 3].mean(),
+                'losses/bellman_qattention': q_delta[:, 4].mean(),
             })
         else:
             self._summaries.update({
