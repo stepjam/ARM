@@ -29,7 +29,7 @@ class PreprocessAgent(Agent):
 
     def act(self, step: int, observation: dict,
             deterministic=False) -> ActResult:
-        observation = {k: torch.tensor(v) for k, v in observation.items()}
+        # observation = {k: torch.tensor(v) for k, v in observation.items()}
         for k, v in observation.items():
             if 'rgb' in k:
                 observation[k] = self._norm_rgb_(v)

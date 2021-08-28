@@ -30,6 +30,9 @@ class QAttentionStackAgent(Agent):
         self._rotation_prediction_depth = rotation_prediction_depth
 
     def build(self, training: bool, device=None) -> None:
+        self._device = device
+        if self._device is None:
+            self._device = torch.device('cpu')
         for qa in self._qattention_agents:
             qa.build(training, device)
 
@@ -51,34 +54,33 @@ class QAttentionStackAgent(Agent):
         infos = {}
         for depth, qagent in enumerate(self._qattention_agents):
             act_results = qagent.act(step, observation, deterministic)
-            attention_coordinate = act_results.observation_elements['attention_coordinate']
-            observation_elements['attention_coordinate_layer_%d' % depth] = attention_coordinate[0].numpy()
+            attention_coordinate = act_results.observation_elements['attention_coordinate'].cpu().numpy()
+            observation_elements['attention_coordinate_layer_%d' % depth] = attention_coordinate[0]
 
             translation_idxs, rot_grip_idxs = act_results.action
             translation_results.append(translation_idxs)
             if rot_grip_idxs is not None:
                 rot_grip_results.append(rot_grip_idxs)
 
-            observation['attention_coordinate'] = attention_coordinate
-            # observation['voxel_grid_depth_%d' % depth] = act_results.extra_replay_elements['voxel_grid_depth_%d' % depth]
+            observation['attention_coordinate'] = act_results.observation_elements['attention_coordinate']
             observation['prev_layer_voxel_grid'] = act_results.observation_elements['prev_layer_voxel_grid']
 
             for n in self._camera_names:
                 px, py = utils.point_to_pixel_index(
-                    attention_coordinate[0].numpy(),
-                    observation['%s_camera_extrinsics' % n][0, 0].numpy(),
-                    observation['%s_camera_intrinsics' % n][0, 0].numpy())
-                pc_t = torch.tensor([[[py, px]]], dtype=torch.float32)
+                    attention_coordinate[0],
+                    observation['%s_camera_extrinsics' % n][0, 0].cpu().numpy(),
+                    observation['%s_camera_intrinsics' % n][0, 0].cpu().numpy())
+                pc_t = torch.tensor([[[py, px]]], dtype=torch.float32, device=self._device)
                 observation['%s_pixel_coord' % n] = pc_t
                 observation_elements['%s_pixel_coord' % n] = [py, px]
 
             infos.update(act_results.info)
 
-        rgai = torch.cat(rot_grip_results, 1)[0].numpy()
-        observation_elements['trans_action_indicies'] = torch.cat(translation_results, 1)[0].numpy()
+        rgai = torch.cat(rot_grip_results, 1)[0].cpu().numpy()
+        observation_elements['trans_action_indicies'] = torch.cat(translation_results, 1)[0].cpu().numpy()
         observation_elements['rot_grip_action_indicies'] = rgai
         continuous_action = np.concatenate([
-            act_results.observation_elements['attention_coordinate'].numpy()[0],
+            act_results.observation_elements['attention_coordinate'].cpu().numpy()[0],
             utils.discrete_euler_to_quaternion(rgai[-4:-1], self._rotation_resolution),
             rgai[-1:]])
         return ActResult(

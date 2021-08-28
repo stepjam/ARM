@@ -76,7 +76,16 @@ def _modify_action_min_max(action_min_max):
     return action_min_max
 
 
-def run_seed(cfg: DictConfig, env, cams, device, seed) -> None:
+def _get_device(gpu):
+    if gpu is not None and gpu >= 0 and torch.cuda.is_available():
+        device = torch.device("cuda:%d" % gpu)
+        torch.backends.cudnn.enabled = torch.backends.cudnn.benchmark = True
+    else:
+        device = torch.device("cpu")
+    return device
+
+
+def run_seed(cfg: DictConfig, env, cams, train_device, env_device, seed) -> None:
     train_envs = cfg.framework.train_envs
     replay_ratio = None if cfg.framework.replay_ratio == 'None' else cfg.framework.replay_ratio
     replay_split = [1]
@@ -257,11 +266,12 @@ def run_seed(cfg: DictConfig, env, cams, device, seed) -> None:
         episodes=99999,
         episode_length=cfg.rlbench.episode_length,
         stat_accumulator=stat_accum,
-        weightsdir=weightsdir)
+        weightsdir=weightsdir,
+        env_device=env_device)
 
     train_runner = PyTorchTrainRunner(
         agent, env_runner,
-        wrapped_replays, device, replay_split, stat_accum,
+        wrapped_replays, train_device, replay_split, stat_accum,
         iterations=cfg.framework.training_iterations,
         save_freq=100, log_freq=cfg.framework.log_freq, logdir=logdir,
         weightsdir=weightsdir,
@@ -279,13 +289,10 @@ def run_seed(cfg: DictConfig, env, cams, device, seed) -> None:
 def main(cfg: DictConfig) -> None:
     logging.info('\n' + OmegaConf.to_yaml(cfg))
 
-    if cfg.framework.gpu is not None and torch.cuda.is_available():
-        device = torch.device("cuda:%d" % cfg.framework.gpu)
-        torch.cuda.set_device(cfg.framework.gpu)
-        torch.backends.cudnn.enabled = torch.backends.cudnn.benchmark = True
-    else:
-        device = torch.device("cpu")
-    logging.info('Using device %s.' % str(device))
+    train_device = _get_device(cfg.framework.gpu)
+    env_device = _get_device(cfg.framework.env_gpu)
+    logging.info('Using training device %s.' % str(train_device))
+    logging.info('Using env device %s.' % str(env_device))
 
     action_mode = ActionMode(
         ArmActionMode.ABS_EE_POSE_PLAN_WORLD_FRAME,
@@ -313,7 +320,7 @@ def main(cfg: DictConfig) -> None:
 
     for seed in range(existing_seeds, existing_seeds + cfg.framework.seeds):
         logging.info('Starting seed %d.' % seed)
-        run_seed(cfg, env, cfg.rlbench.cameras, device, seed)
+        run_seed(cfg, env, cfg.rlbench.cameras, train_device, env_device, seed)
 
 
 if __name__ == '__main__':

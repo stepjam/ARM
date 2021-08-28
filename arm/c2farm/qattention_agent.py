@@ -467,14 +467,14 @@ class QAttentionAgent(Agent):
         return [
             ImageSummary('%s/act_Qattention' % self._name,
                          transforms.ToTensor()(visualise_voxel(
-                             self._act_voxel_grid.numpy(),
-                             self._act_qvalues.numpy(),
-                             self._act_max_coordinate.numpy())))]
+                             self._act_voxel_grid.cpu().numpy(),
+                             self._act_qvalues.cpu().numpy(),
+                             self._act_max_coordinate.cpu().numpy())))]
 
     def load_weights(self, savedir: str):
         self._q.load_state_dict(
             torch.load(os.path.join(savedir, '%s.pt' % self._name),
-                       map_location=torch.device('cpu')))
+                       map_location=self._device))
 
     def save_weights(self, savedir: str):
         torch.save(
