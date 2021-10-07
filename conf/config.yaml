@@ -24,6 +24,7 @@ framework:
     csv_logging: True
     training_iterations: 40000
     gpu: 0
+    env_gpu: 0
     logdir: '/tmp/arm_test/'
     seeds: 1
 
