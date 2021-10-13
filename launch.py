@@ -226,7 +226,7 @@ def run_seed(cfg: DictConfig, env, cams, train_device, env_device, seed) -> None
             cfg.method.discriminator_lr, cfg.method.discriminator_grad_clip,
             cfg.method.discriminator_weight_decay)
 
-    elif cfg.method.name == 'bc':
+    elif cfg.method.name == 'BC':
         if train_envs > 0:
             logging.warning('Training envs set to 0 for BC.')
             train_envs = 0
