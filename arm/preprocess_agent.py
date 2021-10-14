@@ -29,6 +29,15 @@ class PreprocessAgent(Agent):
 
     def act(self, step: int, observation: dict,
             deterministic=False) -> ActResult:
+        '''
+        observation (dict): 
+            'front_rgb': (1, 1, 3, 128, 128)
+            'front_point_cloud': (1, 1, 3, 128, 128)
+            'low_dim_state': (1, 1, 3)
+            'front_camera_extrinsics': (1, 1, 4, 4)
+            'front_camera_intrinsics': (1, 1, 3, 3)
+        '''
+
         # observation = {k: torch.tensor(v) for k, v in observation.items()}
         for k, v in observation.items():
             if 'rgb' in k:

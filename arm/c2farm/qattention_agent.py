@@ -36,12 +36,42 @@ class QFunction(nn.Module):
         self._qnet.build()
 
     def _argmax_3d(self, tensor_orig):
+        '''
+        calculate the index of x-axis, y-axis, z-axis with the maximum 
+        q value of the voxel grid
+        
+        Input:
+        - tensor_orig: the q value voxel grid with shape (batch_size, 
+                       channel_size, voxel_size, voxel_size, voxel_size)
+        
+        Output:
+        - indices: index of the voxel with highest q-value in the voxel grid 
+                   with shape (batch_size, 3)
+        '''
+
         b, c, d, h, w = tensor_orig.shape  # c will be one
         idxs = tensor_orig.view(b, c, -1).argmax(-1)
         indices = torch.cat([((idxs // h) // d), (idxs // h) % w, idxs % w], 1)
         return indices
 
     def choose_highest_action(self, q_trans, q_rot_grip):
+        '''
+        choose the voxel with the highest q value\\
+        If `q_rot_grip` is `None`, `rot_and_grip_indicies` will be `None` as well
+        
+        Input:
+        - q_trans: the q value voxel grid with shape (batch_size, 
+                   channel_size, voxel_size, voxel_size, voxel_size)
+        - q_rot_grip: (batch_size, 360//rotation_resolution*3)
+        
+        Output:
+        - coords: position (index) voxel field with highest q-value with 
+                  shape (batch_size, 3)
+        - rot_and_grip_indicies: rotation index for eular (xyz) and 
+                                 whether the gripper is open (0 or 1) with shape  
+                                 (batch_size, 4)
+        '''
+
         coords = self._argmax_3d(q_trans)
         rot_and_grip_indicies = None
         if q_rot_grip is not None:
@@ -58,6 +88,23 @@ class QFunction(nn.Module):
 
     def forward(self, x, proprio, pcd,
                 bounds=None, latent=None):
+        '''
+        Input:
+        - x (list): [rgb, pcd]
+        - proprio: the state for the robot arm
+        - pcd: point cloud
+        - bound
+        - latent    
+        
+        Output:
+        - q_trans: the q value voxel grid with shape (batch_size, 
+                   channel_size, voxel_size, voxel_size, voxel_size)
+        - rot_and_grip_q: (batch_size, 360//rotation_resolution*3)
+        - voxel_grid: the voxel grid formed by observation (rgb and 
+                      depth image) with shape (batch_size, voxel_feat, 
+                      voxel_size, voxel_size, voxel_size)
+        '''
+
         # x will be list of list (list of [rgb, pcd])
         b = x[0][0].shape[0]
         pcd_flat = torch.cat(
@@ -136,6 +183,14 @@ class QAttentionAgent(Agent):
         self._name = NAME + '_layer' + str(self._layer)
 
     def build(self, training: bool, device: torch.device = None):
+        '''
+        build the network
+
+        Input:
+        - training: whether the built network is in the training mode
+        - device: the device (gpu/cpu) used for the agent
+        '''
+
         if device is None:
             device = torch.device('cpu')
 
@@ -184,6 +239,17 @@ class QAttentionAgent(Agent):
         self._device = device
 
     def _extract_crop(self, pixel_action, observation):
+        '''
+        use the `pixel_action` as anchor
+
+        Input:
+        - pixel_action: (batch_size, 1, 2)
+        - observation: (batch_size, 1, 3, img_h, img_w)
+
+        Output:
+        - crop:
+        '''
+
         # Pixel action will now be (B, 2)
         observation = stack_on_channel(observation)
         h = observation.shape[-1]
@@ -200,6 +266,22 @@ class QAttentionAgent(Agent):
         return crop
 
     def _preprocess_inputs(self, replay_sample):
+        '''
+        pack the inputs
+
+        If the layer > 0, we will crop the rgb/depth image
+
+        Input:
+        - replay_sample: the sampled transitions from the replay buffer
+
+        Output:
+        - obs: rgb and depth image 
+        - obs_tp1: rgb and depth image for next timestep
+        - pcds: depth image 
+        - pcds_tp1: depth image for next timestep
+        '''
+
+
         obs, obs_tp1 = [], []
         pcds, pcds_tp1 = [], []
         self._crop_summary, self._crop_summary_tp1 = [], []
@@ -229,6 +311,28 @@ class QAttentionAgent(Agent):
         return obs, obs_tp1, pcds, pcds_tp1
 
     def _act_preprocess_inputs(self, observation):
+        '''
+        pack the observation for each camera
+
+        Input:
+        - obervation:
+            - front_rgb:
+            - front_point_cloud: 
+            - low_dim_state:
+            - front_camera_extrinsics:
+            - front_camera_intrinsics:
+
+            If the depth > 0
+
+            - attention_coordinate:
+            - prev_layer_voxel_grid:
+            - front_pixel_coord:
+
+        Output:
+        - obs (list): [[rgb, pcd], [rgb, pcd], ......]
+        - pcds: list of point cloud (with shape (batch_size, 3, h, w))
+        '''
+
         obs, pcds = [], []
         for n in self._camera_names:
             if self._layer > 0 and 'wrist' not in n:
@@ -243,6 +347,19 @@ class QAttentionAgent(Agent):
         return obs, pcds
 
     def _get_value_from_voxel_index(self, q, voxel_idx):
+        '''
+        extract the feature from the voxel grid feature with index
+        
+        Input:
+        - q: a voxel-grid of the q value (batch_size, channel_size, 
+             voxel_size, voxel_size, voxel_size)
+        - voxel_idx: (batch_size, 3)
+
+        Output:
+        - chosen_voxel_values: (batch_size, channel_size)
+        '''
+
+
         b, c, d, h, w = q.shape
         q_flat = q.view(b, c, d * h * w)
         flat_indicies = (voxel_idx[:, 0] * d * h + voxel_idx[:, 1] * h + voxel_idx[:, 2])[:, None].long()
@@ -251,6 +368,17 @@ class QAttentionAgent(Agent):
         return chosen_voxel_values
 
     def _get_value_from_rot_and_grip(self, rot_grip_q, rot_and_grip_idx):
+        '''
+
+        
+        Input:
+        - rot_grip_q: (batch_size, 360//rotation_resolution*3 + 2)
+        - rot_and_grip_idx: (batch_size, 4)
+
+        Output:
+        - rot_and_grip_values: (batch_size, 4)
+        '''
+
         q_rot = torch.stack(torch.split(
             rot_grip_q[:, :-2], int(360 // self._rotation_resolution),
             dim=1), dim=1)  # B, 3, 72
@@ -263,6 +391,16 @@ class QAttentionAgent(Agent):
         return rot_and_grip_values
 
     def update(self, step: int, replay_sample: dict) -> dict:
+        '''
+        update the policy parameters
+
+        NOTE: 'tp1' means next state
+
+        Input:
+        - step:
+        - replay_sample (dict): contains the sampled transitions
+        '''
+
 
         action_trans = replay_sample['trans_action_indicies'][:, -1,
                        self._layer * 3:self._layer * 3 + 3]
@@ -374,6 +512,38 @@ class QAttentionAgent(Agent):
     def act(self, step: int, observation: dict,
             deterministic=False) -> ActResult:
         deterministic = True  # TODO: Don't explicitly explore.
+        '''
+        take the observation as input and reture the action
+
+        Input:
+        - step: dummy, please neglect
+        - observation (dict):
+            - front_rgb: rgb image of front camera
+            - front_point_cloud: depth image of front camera
+            - low_dim_state: the state of the robot arm 
+            - front_camera_extrinsics
+            - front_camera_intrinsics 
+
+            (when layer>=1, the following information is included)
+            - attention_coordinate
+            - prev_layer_voxel_grid
+            - front_pixel_coord
+
+        Output:
+        - act_result:
+            - action (tuple): it contain `coords` and `rot_grip_action`
+                - coords: the gripper position in the voxel grid index
+                - rot_grip_action:
+            - observation_elements (dict):
+                - attention_coordinate:
+                - prev_layer_voxel_grid:
+            - info (dict):
+                - voxel_grid_depth:
+                - q_depth:
+                - voxel_idx_depth:
+        '''
+
+
         bounds = self._coordinate_bounds
 
         if self._layer > 0:

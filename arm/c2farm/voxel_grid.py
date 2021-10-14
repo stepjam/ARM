@@ -17,6 +17,17 @@ class VoxelGrid(nn.Module):
                  batch_size,
                  feature_size,  # e.g. rgb or image features
                  max_num_coords: int,):
+        '''
+        module that transform point cloud to voxel
+
+        - coord_bounds: the bound of 3D volume in world coordinate
+        - voxel_size: number of voxels in 
+        - device: gpu or cpu
+        - batch_size:
+        - feature_size:
+        - max_num_coords: the number of pixel from the images
+        '''
+
         super(VoxelGrid, self).__init__()
         self._device = device
         self._voxel_size = voxel_size
@@ -95,6 +106,17 @@ class VoxelGrid(nn.Module):
 
     def _scatter_mean(self, src: torch.Tensor, index: torch.Tensor, out: torch.Tensor,
                       dim: int = -1):
+        '''
+        average the value from `src` with specified induce `index` and dimension `dim`
+        , then, save to another tensor `out`
+        
+        Input:
+        - src:
+        - index:
+        - out:
+        - dim:
+        '''
+
         out = out.scatter_add_(dim, index, src)
 
         index_dim = dim
@@ -115,6 +137,21 @@ class VoxelGrid(nn.Module):
         return out
 
     def _scatter_nd(self, indices, updates):
+        '''
+        contructure the voxel grid with the point feature 
+        and index of the point in the voxel grid
+
+        Input:
+        - indices: the index with (batch_size*num_coords, 4), and the index 
+                   includes batch_idx, x_idx, y_idx, z_idx on the last 
+                   dimention
+        - updates: the feature of each position/point with 
+                   shape (batch_size*num_coords, feature_size)
+        
+        Output:
+        - voxel_grid: a volume of voxels
+        '''
+
         indices_shape = indices.shape
         num_index_dims = indices_shape[-1]
         flat_updates = updates.view((-1,))
@@ -137,6 +174,20 @@ class VoxelGrid(nn.Module):
 
     def coords_to_bounding_voxel_grid(self, coords, coord_features=None,
                                       coord_bounds=None):
+        '''
+        form the voxel grid with bound `coord_bounds`.
+
+        Input:
+        - coords: 3D position, i.e., point cloud with shape 
+                  (self._batch_size, self._num_coords, 3)
+        - coord_features: feature for each point/position (e.g. RGB) with
+                          (self._batch_size, self._num_coords, 3)
+
+        Output:
+        - voxel_grid: (self._batch_size, voxel_size, voxel_size, 
+                       voxel_size, voxel_feat)
+        '''
+
         voxel_indicy_denmominator = self._voxel_indicy_denmominator
         res, bb_mins = self._res, self._bb_mins
         if coord_bounds is not None:
