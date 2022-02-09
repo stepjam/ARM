@@ -94,7 +94,7 @@ class Conv2DBlock(nn.Module):
 class Conv3DBlock(nn.Module):
 
     def __init__(self, in_channels, out_channels,
-                 kernel_sizes: Union[int, list], strides,
+                 kernel_sizes: Union[int, list]=3, strides=1,
                  norm=None, activation=None, padding_mode='replicate',
                  padding=None):
         super(Conv3DBlock, self).__init__()
@@ -124,9 +124,10 @@ class Conv3DBlock(nn.Module):
         self.activation = None
         self.norm = None
         if norm is not None:
-            self.norm = norm_layer3d(norm, out_channels)
+            raise NotImplementedError('Norm not implemented.')
         if activation is not None:
             self.activation = act_layer(activation)
+        self.out_channels = out_channels
 
     def forward(self, x):
         x = self.conv3d(x)
@@ -147,6 +148,26 @@ class Conv2DUpsampleBlock(nn.Module):
                 scale_factor=strides, mode='bilinear',
                 align_corners=False))
         convt_block = Conv2DBlock(
+            out_channels, out_channels, kernel_sizes, 1, norm, activation)
+        layer.append(convt_block)
+        self.conv_up = nn.Sequential(*layer)
+
+    def forward(self, x):
+        return self.conv_up(x)
+
+
+class Conv3DUpsampleBlock(nn.Module):
+
+    def __init__(self, in_channels, out_channels, strides, kernel_sizes=3,
+                 norm=None, activation=None):
+        super(Conv3DUpsampleBlock, self).__init__()
+        layer = [Conv3DBlock(
+            in_channels, out_channels, kernel_sizes, 1, norm, activation)]
+        if strides > 1:
+            layer.append(nn.Upsample(
+                scale_factor=strides, mode='trilinear',
+                align_corners=False))
+        convt_block = Conv3DBlock(
             out_channels, out_channels, kernel_sizes, 1, norm, activation)
         layer.append(convt_block)
         self.conv_up = nn.Sequential(*layer)

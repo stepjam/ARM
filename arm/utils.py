@@ -32,7 +32,7 @@ def stack_on_channel(x):
 
 
 def normalize_quaternion(quat):
-    return np.array(quat) / np.linalg.norm(quat)
+    return np.array(quat) / np.linalg.norm(quat, axis=-1, keepdims=True)
 
 
 def quaternion_to_discrete_euler(quaternion, resolution):

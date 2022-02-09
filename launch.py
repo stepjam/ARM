@@ -1,13 +1,19 @@
+import gc
+import logging
 import os
-import pickle
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-
+import pickle
 from typing import List
+
+import hydra
+import numpy as np
 import torch
-from pyrep.const import RenderMode
-from rlbench import CameraConfig, ObservationConfig, ArmActionMode
-from rlbench.action_modes import ActionMode, GripperActionMode
+from omegaconf import DictConfig, OmegaConf, ListConfig
+from rlbench import CameraConfig, ObservationConfig
+from rlbench.action_modes.action_mode import MoveArmThenGripper
+from rlbench.action_modes.arm_action_modes import EndEffectorPoseViaPlanning
+from rlbench.action_modes.gripper_action_modes import Discrete
 from rlbench.backend import task
 from rlbench.backend.utils import task_file_to_task_class
 from yarr.replay_buffer.wrappers.pytorch_replay_buffer import \
@@ -16,15 +22,12 @@ from yarr.runners.env_runner import EnvRunner
 from yarr.runners.pytorch_train_runner import PyTorchTrainRunner
 from yarr.utils.stat_accumulator import SimpleAccumulator
 
-from arm import arm
-from arm import c2farm
+from arm import arm, c2farm
 from arm.baselines import bc, td3, dac, sac
 from arm.custom_rlbench_env import CustomRLBenchEnv
-import numpy as np
+from pyrep.const import RenderMode
 
-import hydra
-import logging
-from omegaconf import DictConfig, OmegaConf, ListConfig
+from yarr.utils.rollout_generator import RolloutGenerator
 
 
 def _create_obs_config(camera_names: List[str], camera_resolution: List[int]):
@@ -53,7 +56,7 @@ def _create_obs_config(camera_names: List[str], camera_resolution: List[int]):
         wrist_camera=kwargs.get('wrist', unused_cams),
         overhead_camera=kwargs.get('overhead', unused_cams),
         joint_forces=False,
-        joint_positions=False,
+        joint_positions=True,
         joint_velocities=True,
         task_low_dim_state=False,
         gripper_touch_forces=False,
@@ -92,7 +95,8 @@ def run_seed(cfg: DictConfig, env, cams, train_device, env_device, seed) -> None
     replay_path = os.path.join(cfg.replay.path, cfg.rlbench.task, cfg.method.name, 'seed%d' % seed)
     action_min_max = None
 
-    if cfg.method.name == 'C2FARM':
+    rg = RolloutGenerator()
+    if 'C2FARM' in cfg.method.name:
         explore_replay = c2farm.launch_utils.create_replay(
             cfg.replay.batch_size, cfg.replay.timesteps,
             cfg.replay.prioritisation,
@@ -107,7 +111,13 @@ def run_seed(cfg: DictConfig, env, cams, train_device, env_device, seed) -> None
             cfg.method.voxel_sizes, cfg.method.bounds_offset,
             cfg.method.rotation_resolution, cfg.method.crop_augmentation)
 
-        agent = c2farm.launch_utils.create_agent(cfg, env)
+        if cfg.method.name == 'C2FARM':
+            agent = c2farm.launch_utils.create_agent(
+                cfg, env, cfg.rlbench.scene_bounds, cfg.rlbench.camera_resolution)
+        else:
+            agent = c2farm_tree.launch_utils.create_agent(
+                cfg, env, cfg.rlbench.scene_bounds,
+                cfg.rlbench.camera_resolution)
 
     elif cfg.method.name == 'ARM':
         if len(cams) > 1 or 'front' not in cams:
@@ -267,13 +277,16 @@ def run_seed(cfg: DictConfig, env, cams, train_device, env_device, seed) -> None
         episode_length=cfg.rlbench.episode_length,
         stat_accumulator=stat_accum,
         weightsdir=weightsdir,
-        env_device=env_device)
+        env_device=env_device,
+        rollout_generator=rg)
 
     train_runner = PyTorchTrainRunner(
         agent, env_runner,
         wrapped_replays, train_device, replay_split, stat_accum,
         iterations=cfg.framework.training_iterations,
-        save_freq=100, log_freq=cfg.framework.log_freq, logdir=logdir,
+        save_freq=cfg.framework.save_freq,
+        log_freq=cfg.framework.log_freq,
+        logdir=logdir,
         weightsdir=weightsdir,
         replay_ratio=replay_ratio,
         transitions_before_train=cfg.framework.transitions_before_train,
@@ -282,6 +295,9 @@ def run_seed(cfg: DictConfig, env, cams, train_device, env_device, seed) -> None
     train_runner.start()
     del train_runner
     del env_runner
+    del agent
+    del env
+    gc.collect()
     torch.cuda.empty_cache()
 
 
@@ -294,9 +310,9 @@ def main(cfg: DictConfig) -> None:
     logging.info('Using training device %s.' % str(train_device))
     logging.info('Using env device %s.' % str(env_device))
 
-    action_mode = ActionMode(
-        ArmActionMode.ABS_EE_POSE_PLAN_WORLD_FRAME,
-        GripperActionMode.OPEN_AMOUNT)
+    gripper_mode = Discrete()
+    arm_action_mode = EndEffectorPoseViaPlanning()
+    action_mode = MoveArmThenGripper(arm_action_mode, gripper_mode)
 
     task_files = [t.replace('.py', '') for t in os.listdir(task.TASKS_PATH)
                   if t != '__init__.py' and t.endswith('.py')]
@@ -312,7 +328,8 @@ def main(cfg: DictConfig) -> None:
     env = CustomRLBenchEnv(
         task_class=task_class, observation_config=obs_config,
         action_mode=action_mode, dataset_root=cfg.rlbench.demo_path,
-        episode_length=cfg.rlbench.episode_length, headless=True)
+        episode_length=cfg.rlbench.episode_length, headless=True,
+        time_in_state=True)
 
     cwd = os.getcwd()
     logging.info('CWD:' + os.getcwd())

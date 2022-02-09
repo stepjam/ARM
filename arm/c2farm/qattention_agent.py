@@ -288,8 +288,7 @@ class QAttentionAgent(Agent):
             proprio = stack_on_channel(replay_sample['low_dim_state'])
             proprio_tp1 = stack_on_channel(replay_sample['low_dim_state_tp1'])
 
-        # Don't want timeouts to be classed as terminals
-        terminal = replay_sample['terminal'].float() - replay_sample['timeout'].float()
+        terminal = replay_sample['terminal'].float()
 
         obs, obs_tp1, pcd, pcd_tp1 = self._preprocess_inputs(replay_sample)
 
@@ -313,19 +312,19 @@ class QAttentionAgent(Agent):
             q_tp1_at_voxel_idx = self._get_value_from_voxel_index(q_tp1_targ, coords_tp1)
             if with_rot_and_grip:
                 target_q_tp1_rot_grip = self._get_value_from_rot_and_grip(q_rot_grip_tp1_targ, rot_and_grip_indicies_tp1)  # (B, 4)
-                q_tp1_at_voxel_idx = target_q_tp1_rot_grip.mean(1, keepdim=True)
+                q_tp1_at_voxel_idx = torch.cat([q_tp1_at_voxel_idx, target_q_tp1_rot_grip], 1).mean(1, keepdim=True)
 
             q_target = (reward.unsqueeze(1) + (self._gamma ** self._nstep) * (1 - terminal.unsqueeze(1)) * q_tp1_at_voxel_idx).detach()
-            q_target = torch.clamp(q_target, 0.0, 1.0)
+            q_target = torch.maximum(q_target, torch.zeros_like(q_target))
 
         qreg_loss = F.l1_loss(q, torch.zeros_like(q), reduction='none')
         qreg_loss = qreg_loss.mean(-1).mean(-1).mean(-1).mean(-1) * self._lambda_trans_qreg
         chosen_trans_q1 = self._get_value_from_voxel_index(q, action_trans)
-        q_delta = F.smooth_l1_loss(chosen_trans_q1[:, :1], q_target, reduction='none')
+        q_delta = F.smooth_l1_loss(chosen_trans_q1[:, :1], q_target[:, :1], reduction='none')
         if with_rot_and_grip:
             target_q_rot_grip = self._get_value_from_rot_and_grip(q_rot_grip, action_rot_grip)  # (B, 4)
             q_delta = torch.cat([F.smooth_l1_loss(target_q_rot_grip, q_target.repeat((1, 4)), reduction='none'), q_delta], -1)
-            qreg_loss += F.l1_loss(q_rot_grip, torch.zeros_like(q_rot_grip), reduction='none').mean(1) * self._lambda_trans_qreg
+            qreg_loss += F.l1_loss(q_rot_grip, torch.zeros_like(q_rot_grip), reduction='none').mean(1) * self._lambda_rot_qreg
 
         loss_weights = utils.loss_weights(replay_sample, REPLAY_BETA)
         combined_delta = q_delta.mean(1)

@@ -1,19 +1,18 @@
 from typing import Type, List
 
 import numpy as np
-from pyrep.const import RenderMode
-from pyrep.errors import IKError, ConfigurationPathError
-from pyrep.objects import VisionSensor, Dummy
-from rlbench import ObservationConfig, CameraConfig
-from rlbench.action_modes import ActionMode
+from rlbench import ObservationConfig, ActionMode
+from rlbench.backend.exceptions import InvalidActionError
 from rlbench.backend.observation import Observation
 from rlbench.backend.task import Task
-from rlbench.task_environment import InvalidActionError
-
 from yarr.agents.agent import ActResult, VideoSummary
 from yarr.envs.rlbench_env import RLBenchEnv
 from yarr.utils.observation_type import ObservationElement
 from yarr.utils.transition import Transition
+
+from pyrep.const import RenderMode
+from pyrep.errors import IKError, ConfigurationPathError
+from pyrep.objects import VisionSensor, Dummy
 
 RECORD_EVERY = 20
 
@@ -28,7 +27,8 @@ class CustomRLBenchEnv(RLBenchEnv):
                  dataset_root: str = '',
                  channels_last: bool = False,
                  reward_scale=100.0,
-                 headless: bool = True,):
+                 headless: bool = True,
+                 time_in_state: bool = False):
         super(CustomRLBenchEnv, self).__init__(
             task_class, observation_config, action_mode, dataset_root,
             channels_last, headless=headless)
@@ -39,6 +39,7 @@ class CustomRLBenchEnv(RLBenchEnv):
         self._previous_obs, self._previous_obs_dict = None, None
         self._recorded_images = []
         self._episode_length = episode_length
+        self._time_in_state = time_in_state
         self._i = 0
 
     @property
@@ -46,24 +47,37 @@ class CustomRLBenchEnv(RLBenchEnv):
         obs_elems = super(CustomRLBenchEnv, self).observation_elements
         for oe in obs_elems:
             if oe.name == 'low_dim_state':
-                oe.shape = (oe.shape[0] - 7 * 2,)  # remove pose and joint velocities as they will not be included
+                oe.shape = (oe.shape[0] - 7 * 2 + int(self._time_in_state),)  # remove pose and joint velocities as they will not be included
                 self.low_dim_state_len = oe.shape[0]
+        obs_elems.append(ObservationElement('gripper_pose', (7,), np.float32))
         return obs_elems
 
     def extract_obs(self, obs: Observation, t=None, prev_action=None):
         obs.joint_velocities = None
         grip_mat = obs.gripper_matrix
         grip_pose = obs.gripper_pose
-        obs.gripper_pose = None
+        joint_pos = obs.joint_positions
+        # obs.gripper_pose = None
         obs.gripper_matrix = None
         obs.wrist_camera_matrix = None
+        obs.joint_positions = None
         if obs.gripper_joint_positions is not None:
             obs.gripper_joint_positions = np.clip(
                 obs.gripper_joint_positions, 0., 0.04)
 
         obs_dict = super(CustomRLBenchEnv, self).extract_obs(obs)
+
+        if self._time_in_state:
+            time = (1. - ((self._i if t is None else t) / float(
+                self._episode_length - 1))) * 2. - 1.
+            obs_dict['low_dim_state'] = np.concatenate(
+                [obs_dict['low_dim_state'], [time]]).astype(np.float32)
+
         obs.gripper_matrix = grip_mat
-        obs.gripper_pose = grip_pose
+        # obs.gripper_pose = grip_pose
+        obs.joint_positions = joint_pos
+
+        obs_dict['gripper_pose'] = grip_pose
         return obs_dict
 
     def launch(self):
@@ -79,12 +93,12 @@ class CustomRLBenchEnv(RLBenchEnv):
             self._record_cam.set_render_mode(RenderMode.OPENGL)
 
     def reset(self) -> dict:
+        self._i = 0
         self._previous_obs_dict = super(CustomRLBenchEnv, self).reset()
         self._record_current_episode = (
                 self.eval and self._episode_index % RECORD_EVERY == 0)
         self._episode_index += 1
         self._recorded_images.clear()
-        self._i = 0
         return self._previous_obs_dict
 
     def register_callback(self, func):
@@ -109,9 +123,10 @@ class CustomRLBenchEnv(RLBenchEnv):
         action = act_result.action
         success = False
         obs = self._previous_obs_dict  # in case action fails.
+
         try:
             obs, reward, terminal = self._task.step(action)
-            if terminal:
+            if reward >= 1:
                 success = True
                 reward *= self._reward_scale
             else:
@@ -120,7 +135,7 @@ class CustomRLBenchEnv(RLBenchEnv):
             self._previous_obs_dict = obs
         except (IKError, ConfigurationPathError, InvalidActionError) as e:
             terminal = True
-            reward = -1.0
+            reward = 0.0
 
         summaries = []
         self._i += 1
@@ -128,7 +143,9 @@ class CustomRLBenchEnv(RLBenchEnv):
                 self._record_current_episode):
             self._append_final_frame(success)
             vid = np.array(self._recorded_images).transpose((0, 3, 1, 2))
-            summaries.append(VideoSummary('episode_rollout', vid, fps=30))
+            summaries.append(VideoSummary(
+                'episode_rollout_' + ('success' if success else 'fail'),
+                vid, fps=30))
         return Transition(obs, reward, terminal, summaries=summaries)
 
     def reset_to_demo(self, i):
