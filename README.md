@@ -1,11 +1,12 @@
 # Attention-driven Robotic Manipulation (ARM)
 
-Codebase of Q-attention (within the ARM system) and coarse-to-fine Q-attention (within C2F-ARM system) from the following papers:
+Codebase of Q-attention and ARM variants from the following papers:
 
 - [Q-attention: Enabling Efficient Learning for Vision-based Robotic Manipulation](https://arxiv.org/abs/2105.14829) (ARM system)
 - [Coarse-to-Fine Q-attention: Efficient Learning for Visual Robotic Manipulation via Discretisation](https://arxiv.org/abs/2106.12534) (C2F-ARM system)
+- [Coarse-to-Fine Q-attention with Learned Path Ranking]() 
 
-![task grid image missing](readme_files/arm_c2farm.png)
+![task grid image missing](readme_files/variants.png)
 
 Not that C2F-ARM is the better performing system.
 
@@ -32,8 +33,13 @@ python dataset_generator.py --save_path=/mnt/my/save/dir --tasks=take_lid_off_sa
 ```
 
 
-Experiments are launched via [Hydra](https://hydra.cc/). To start training C2F-ARM on the 
+Experiments are launched via [Hydra](https://hydra.cc/). To start training **C2F-ARM** on the 
 **take_lid_off_saucepan** task with the default parameters on **gpu 0**:
 ```bash
 python launch.py method=C2FARM rlbench.task=take_lid_off_saucepan rlbench.demo_path=/mnt/my/save/dir framework.gpu=0
+```
+
+To launch **C2F-ARM+LPR**:
+```bash
+python launch.py method=LPR rlbench.task=take_lid_off_saucepan rlbench.demo_path=/mnt/my/save/dir framework.gpu=0
 ```

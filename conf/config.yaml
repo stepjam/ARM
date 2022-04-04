@@ -16,6 +16,7 @@ replay:
 
 framework:
     log_freq: 100
+    save_freq: 100
     train_envs: 1
     eval_envs: 1
     replay_ratio: 128
