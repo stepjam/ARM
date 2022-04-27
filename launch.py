@@ -3,6 +3,7 @@ import logging
 import os
 
 from arm.lpr.rollout_generator import PathArmRolloutGenerator
+from arm.lpr.trajectory_action_mode import TrajectoryActionMode
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 import pickle
@@ -24,7 +25,7 @@ from yarr.runners.env_runner import EnvRunner
 from yarr.runners.pytorch_train_runner import PyTorchTrainRunner
 from yarr.utils.stat_accumulator import SimpleAccumulator
 
-from arm import arm, c2farm, lpr
+from arm import arm, c2farm, lpr, qte
 from arm.baselines import bc, td3, dac, sac
 from arm.custom_rlbench_env import CustomRLBenchEnv
 from pyrep.const import RenderMode
@@ -113,8 +114,14 @@ def run_seed(cfg: DictConfig, env, cams, train_device, env_device, seed) -> None
             cfg.method.voxel_sizes, cfg.method.bounds_offset,
             cfg.method.rotation_resolution, cfg.method.crop_augmentation)
 
-        agent = c2farm.launch_utils.create_agent(
-            cfg, env, cfg.rlbench.scene_bounds, cfg.rlbench.camera_resolution)
+        if cfg.method.name == 'C2FARM':
+            agent = c2farm.launch_utils.create_agent(
+                cfg, env, cfg.rlbench.scene_bounds,
+                cfg.rlbench.camera_resolution)
+        elif cfg.method.name == 'C2FARM+QTE':
+            agent = qte.launch_utils.create_agent(
+                cfg, env, cfg.rlbench.scene_bounds,
+                cfg.rlbench.camera_resolution)
 
     elif cfg.method.name == 'LPR':
         explore_replay = lpr.launch_utils.create_replay(

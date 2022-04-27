@@ -5,6 +5,7 @@ Codebase of Q-attention, coarse-to-fine Q-attention, and other variants. Code fr
 - [Q-attention: Enabling Efficient Learning for Vision-based Robotic Manipulation](https://arxiv.org/abs/2105.14829) (ARM system)
 - [Coarse-to-Fine Q-attention: Efficient Learning for Visual Robotic Manipulation via Discretisation](https://arxiv.org/abs/2106.12534) (C2F-ARM system)
 - [Coarse-to-Fine Q-attention with Learned Path Ranking](https://arxiv.org/abs/2204.01571) (C2F-ARM+LPR system)
+- [Coarse-to-Fine Q-attention with Tree Expansion](https://arxiv.org/abs/2204.12471)
 
 ![task grid image missing](readme_files/variants.png)
 
@@ -41,4 +42,9 @@ python launch.py method=C2FARM rlbench.task=take_lid_off_saucepan rlbench.demo_p
 To launch **C2F-ARM+LPR**:
 ```bash
 python launch.py method=LPR rlbench.task=take_lid_off_saucepan rlbench.demo_path=/mnt/my/save/dir framework.gpu=0
+```
+
+To launch **C2F-ARM+QTE**:
+```bash
+python launch.py method=QTE rlbench.task=take_lid_off_saucepan rlbench.demo_path=/mnt/my/save/dir framework.gpu=0
 ```
