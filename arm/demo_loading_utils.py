@@ -19,6 +19,18 @@ def _is_stopped(demo, i, obs, stopped_buffer, delta=0.1):
 
 
 def keypoint_discovery(demo: Demo, stopping_delta=0.1) -> List[int]:
+    '''
+    get the index of the observation in a demo trajectory
+
+    Input:
+    - demo: a trajectory that contains a sequence of observation
+    - stopping_delta:
+
+    Output:
+    - episode_keypoints (list): indices for the keypoint
+    '''
+
+
     episode_keypoints = []
     prev_gripper_open = demo[0].gripper_open
     stopped_buffer = 0

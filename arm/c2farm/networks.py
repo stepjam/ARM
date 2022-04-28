@@ -18,6 +18,24 @@ class Qattention3DNet(nn.Module):
                  activation: str = 'relu',
                  dense_feats: int = 32,
                  include_prev_layer = False,):
+        '''
+        q-netowrk for a volume of voxels
+
+        Input:
+        - in_channels: int,
+        - out_channels: int,
+        - out_dense: int,
+        - voxel_size: int,
+        - low_dim_size: int,
+        - kernels: int,
+        - norm: str = None,
+        - activation: str = 'relu',
+        - dense_feats: int = 32,
+        - include_prev_layer=False
+        Output:
+        
+        '''
+
         super(Qattention3DNet, self).__init__()
         self._in_channels = in_channels
         self._out_channels = out_channels
@@ -127,6 +145,20 @@ class Qattention3DNet(nn.Module):
                 self._dense_feats, self._out_dense, None, None)
 
     def forward(self, ins, proprio, prev_layer_voxel_grid):
+        '''
+        apply lots of 3D convolution to calculate the q value for each voxel
+
+        Input:
+        - ins (torch.Tensor): the input voxel grid with shape (batch_size, 
+                            voxel_feat, voxel_size, voxel_size, voxel_size)
+        - proprio (torch.Tensor): proprioceptive data of robot arm 
+                                ([1, 3]) or ([128, 3])
+
+        Output:
+        - trans
+        - rot_and_grip_out
+        '''
+
         b, _, d, h, w = ins.shape
         x = self._input_preprocess(ins)
 

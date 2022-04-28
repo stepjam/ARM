@@ -30,6 +30,14 @@ class QAttentionStackAgent(Agent):
         self._rotation_prediction_depth = rotation_prediction_depth
 
     def build(self, training: bool, device=None) -> None:
+        '''
+        iteratively build the network for each agent
+
+        Input:
+        - training: whether the agent is in the training mode
+        - device: 
+        '''
+
         self._device = device
         if self._device is None:
             self._device = torch.device('cpu')
