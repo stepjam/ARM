@@ -45,7 +45,7 @@ def create_replay(batch_size: int, timesteps: int, prioritisation: bool,
         )
 
     extra_replay_elements = [
-        ReplayElement('demo', (), np.bool),
+        ReplayElement('demo', (), bool),
     ]
 
     replay_class = UniformReplayBuffer
