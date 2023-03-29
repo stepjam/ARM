@@ -12,14 +12,44 @@ Codebase of Q-attention, coarse-to-fine Q-attention, and other variants. Code fr
 
 ## Installation
 
-ARM is trained using the **YARR framework**. Head to the [YARR github](https://github.com/stepjam/YARR) page and follow 
-installation instructions.
+ARM is trained using the **YARR framework** and evaluated on **RLBench** 1.1.0.
 
-ARM is evaluated on **RLBench** 1.1.0. Head to the [RLBench github](https://github.com/stepjam/RLBench) page and follow 
-installation instructions. 
-
-Now install project requirements:
+Install all of the project requirements:
 ```bash
+# Create conda environment
+conda create -n arm python=3.8
+
+# Install PyTorch 2.0. Go to PyTorch website to install other versions.
+conda install pytorch=2.0 torchvision torchaudio pytorch-cuda=11.7 -c pytorch -c nvidia
+
+# Install YARR
+pip install git+https://github.com/stepjam/YARR.git
+
+# Install CoppeliaSim 4.1.0 for Ubuntu 20.04
+# Refer to PyRep README for other versions
+export COPPELIASIM_ROOT=${HOME}/.local/bin/CoppeliaSim
+curl -O https://www.coppeliarobotics.com/files/CoppeliaSim_Edu_V4_1_0_Ubuntu20_04.tar.xz
+mkdir -p $COPPELIASIM_ROOT && tar -xf CoppeliaSim_Edu_V4_1_0_Ubuntu20_04.tar.xz -C $COPPELIASIM_ROOT --strip-components 1
+## Add environment variables into bashrc (or zshrc)
+echo "export COPPELIASIM_ROOT=$COPPELIASIM_ROOT
+export LD_LIBRARY_PATH=\$LD_LIBRARY_PATH:\$COPPELIASIM_ROOT
+export QT_QPA_PLATFORM_PLUGIN_PATH=\$COPPELIASIM_ROOT" >> ~/.bashrc
+
+# Install PyRep
+git clone https://github.com/stepjam/PyRep.git .local/PyRep
+cd .local/PyRep
+pip install -r requirements.txt
+pip install .
+cd ../..
+
+# Install RLBench
+git clone https://github.com/stepjam/RLBench.git .local/RLBench
+cd .local/RLBench
+pip install -r requirements.txt
+pip install .
+cd ../..
+
+# Install ARM dependencies
 pip install -r requirements.txt
 ```
 
