@@ -53,6 +53,15 @@ class CustomRLBenchEnv(RLBenchEnv):
         return obs_elems
 
     def extract_obs(self, obs: Observation, t=None, prev_action=None):
+        '''
+        
+        Input:
+        - obs: observation in `rlbench.backend.observation.Observation` type 
+        - t:
+        - prev_action: the action executed in previous step
+        '''
+
+
         obs.joint_velocities = None
         grip_mat = obs.gripper_matrix
         grip_pose = obs.gripper_pose

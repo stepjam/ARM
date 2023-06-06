@@ -24,6 +24,23 @@ REWARD_SCALE = 100.0
 def create_replay(batch_size: int, timesteps: int, prioritisation: bool,
                   save_dir: str, cameras: list, env: Env,
                   voxel_sizes, replay_size=1e5):
+    '''
+    create replay buffer. To be more specific, we first append more `Element`
+    
+    Input:
+    - batch_size: default batch size for sampling
+    - timesteps: how many timestep to be stacked together
+    - prioritisation: whether to use priority replay
+    - save_dir
+    - cameras: list of camera name
+    - env: RLBench environment
+    - voxel_sizes
+    - replay_size: replay buffer capacity
+    
+    Output:
+    - replay_buffer: return the replay buffer
+    '''
+
 
     trans_indicies_size = 3 * len(voxel_sizes)
     rot_and_grip_indicies_size = (3 + 1)
@@ -74,6 +91,23 @@ def _get_action(
         bounds_offset: List[float],
         rotation_resolution: int,
         crop_augmentation: bool):
+    '''
+    extract the gripper pose from the observation
+
+    Input:
+    - obs_tp1:
+    - rlbench_scene_bounds:
+    - voxel_sizes: 
+    - bounds_offset: 
+    - rotation_resolution:
+    - crop_augmentation:
+
+    Output:
+    - trans_indicies
+    - rot_and_grip_indicies
+    - action
+    '''
+
     quat = utils.normalize_quaternion(obs_tp1.gripper_pose[3:])
     if quat[-1] < 0:
         quat = -quat
@@ -115,6 +149,23 @@ def _add_keypoints_to_replay(
         bounds_offset: List[float],
         rotation_resolution: int,
         crop_augmentation: bool):
+    '''
+
+
+    Input:
+    - replay: the replay buffer we would like to add keypoints
+    - inital_obs: the initial observation of a (sub) trajectory
+    - demo: demo trajectory
+    - env: RLBench environment
+    - episode_keypoints:
+    - cameras:
+    - rlbench_scene_bounds:
+    - voxel_sizes:
+    - bounds_offset:
+    - rotation_resolution:
+    - crop_augmentation:
+    '''
+
     prev_action = None
     obs = inital_obs
     for k, keypoint in enumerate(episode_keypoints):
@@ -170,6 +221,19 @@ def fill_replay(replay: ReplayBuffer,
                 bounds_offset: List[float],
                 rotation_resolution: int,
                 crop_augmentation: bool):
+    '''
+    load the demo trajectories and add them to the replay
+
+    Input:
+    - replay: replay buffer
+    - task (str): unique id for RLBench environment
+    - env: RLBench environment
+    - num_demos: number of demo trajectories
+    - demo_augmentation: 
+    - cameras (list): list of camera name
+    - rlbench_scene_bounds: 
+    '''
+
 
     logging.info('Filling replay with demos...')
     for d_idx in range(num_demos):

@@ -20,6 +20,16 @@ def loss_weights(replay_sample, beta=1.0):
 
 
 def soft_updates(net, target_net, tau):
+    '''
+    apply soft update from `net` to `target_net` with weight `tau`. \\
+    `target_net = target_net * (1-tau) + net * tau`
+
+    Input:
+    - net: source network
+    - target_net: updated network
+    - tau: the update weight
+    '''
+
     for param, target_param in zip(net.parameters(), target_net.parameters()):
         target_param.data.copy_(
             tau * param.data + (1 - tau) * target_param.data
@@ -44,6 +54,17 @@ def quaternion_to_discrete_euler(quaternion, resolution):
 
 
 def discrete_euler_to_quaternion(discrete_euler, resolution):
+    '''
+    transform the descrete eular to quaternion
+
+    Input:
+    - discrete_euler: index for xyz euluer
+    - resolution: the minimum unit in degree
+
+    Output:
+    - rotation: quaternion
+    '''
+
     euluer = (discrete_euler * resolution) - 180
     return Rotation.from_euler('xyz', euluer, degrees=True).as_quat()
 
